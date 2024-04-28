@@ -1,0 +1,36 @@
+-- UNITS TRIGGERS
+
+-- create trigger before_update_rent_amount
+DELIMITER //
+CREATE TRIGGER before_update_rent_amount
+BEFORE UPDATE ON units
+FOR EACH ROW
+BEGIN
+    -- Check if the updated value meets a certain condition
+    IF NEW.status = "available"
+    THEN
+        -- Perform some action if the condition is met
+        SET NEW.rent_amount = 1800; -- Double the value
+	ELSEIF NEW.status = "rented"
+    THEN
+		SET NEW.rent_amount = 2000;
+    END IF;
+END;
+//
+DELIMITER ;
+
+-- create trigger before_insert_rent_amount
+DELIMITER //
+CREATE TRIGGER before_insert_rent_amount
+BEFORE INSERT ON units
+FOR EACH ROW
+BEGIN
+    IF NEW.status = "available" THEN
+        -- Perform some action if the condition is met
+        SET NEW.rent_amount = 1800; -- Double the value
+	ELSEIF NEW.status = "rented" THEN
+		SET NEW.rent_amount = 2000;
+    END IF;
+END;
+//
+DELIMITER ;

@@ -1,0 +1,299 @@
+Apartment Database
+
+CREATE DATABASE IF NOT EXISTS apartment;
+
+USE apartment;
+
+-- users table --
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL
+);
+
+-- units table --
+CREATE TABLE units (
+    unit_id INT AUTO_INCREMENT PRIMARY KEY,
+    unit_name VARCHAR(255) NOT NULL,
+    status ENUM('available', 'rented') NOT NULL,
+    rent_amount DECIMAL(10, 2),
+    tenant_id INT,
+    due_date DATE,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id)
+);
+
+-- tenant table --
+CREATE TABLE tenants (
+    tenant_id INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_name VARCHAR(255) NOT NULL,
+    contact_number VARCHAR(15),
+    email VARCHAR(255)
+);
+
+-- INSERT DATA --
+
+-- For units table
+INSERT INTO units (unit_name, status, rent_amount, tenant_id, due_date) VALUES
+('Unit 101', 'available', 1200.00, 10, '2024-02-01'),
+('Unit 102', 'rented', 1500.00, 1, '2024-03-01'),
+('Unit 103', 'available', 1350.00, 8, '2024-01-14'),
+('Unit 104', 'available', 1100.00, 5, '2024-02-14'),
+('Unit 105', 'rented', 1700.00, 2, '2024-03-15'),
+('Unit 106', 'rented', 1450.00, 3, '2024-03-20'),
+('Unit 107', 'available', 1250.00, 7, '2024-02-25'),
+('Unit 108', 'available', 1400.00, 9, '2024-03-03'),
+('Unit 109', 'available', 1300.00, NULL, NULL),
+('Unit 110', 'rented', 1600.00, 4, '2024-03-25');
+
+-- For tenants table
+INSERT INTO tenants (tenant_name, contact_number, email) VALUES
+('John Patrick', '123-456-7890', 'john@example.com'),
+('Merry Chrismas', '987-654-3210', 'merry@example.com'),
+('Michael Jackson', '555-123-4567', 'michael@example.com'),
+('Angelo Cruz', '222-333-4444', 'angelo@example.com'),
+('Marlon Orpiada', '444-555-6666', 'marlon@example.com'),
+('Jet Lee', '777-888-9999', 'jetlee@example.com'),
+('Jackie Rodriguez', '111-222-3333', 'jackie@example.com'),
+('Vic Sotto', '666-777-8888', 'vic@example.com'),
+('Joey De Leon', '999-888-7777', 'joey@example.com'),
+('Sophia Garcia', '333-444-5555', 'sophia@example.com');
+
+-- VIEWS --
+
+-- all_units view
+CREATE VIEW all_units AS
+SELECT * FROM units;
+
+-- rented_units view
+CREATE VIEW rented_units AS
+SELECT * FROM units WHERE status = 'rented';
+
+-- available_units view
+CREATE VIEW available_units AS
+SELECT * FROM units WHERE status = 'available';
+
+-- all_tenants view
+CREATE VIEW all_tenants AS
+SELECT * FROM tenants;
+
+-- STORED PROCEDURES --
+-- find_tenants stored procedure
+CREATE PROCEDURE `find_tenants`(IN id INT)
+BEGIN
+  SELECT *
+  FROM tenants
+  WHERE tenant_id = id;
+END
+
+-- find_units stored procedure
+CREATE PROCEDURE `find_units`(IN id INT)
+BEGIN
+  SELECT *
+  FROM units
+  WHERE unit_id = id;
+END
+
+-- TO CALL THIS STORED PROCEDURES USE THESE
+-- for finding units
+call find_units(id);
+
+-- for finding tenants
+call find_tenants(id);
+
+-- FUNCTIONS --
+
+-- monthly_earnings function
+CREATE FUNCTION calculate_ME()
+RETURNS DECIMAL(10, 2)
+DETERMINISTIC
+BEGIN
+    DECLARE earnings DECIMAL(10, 2);
+    SELECT SUM(rent_amount) INTO earnings FROM rented_units;
+    RETURN earnings;
+END
+
+-- total_due_date function
+CREATE FUNCTION calculate_TD()
+RETURNS INT
+DETERMINISTIC
+BEGIN
+    DECLARE total_due INT;
+    SELECT COUNT(*) INTO total_due FROM rented_units WHERE due_date <= CURDATE();
+    RETURN total_due;
+END
+
+-- TO CALL THIS FUNCTION USE THESE
+select calculate_ME() as monthly_earnings;	-- call function calculate_ME()
+select calculate_TD() as total_duedate;	-- call function calculate_TD()
+
+-- TRIGGERS --
+-- trigger after_unit_insert
+DELIMITER //
+CREATE TRIGGER after_unit_insert
+AFTER INSERT ON units
+FOR EACH ROW
+BEGIN
+    -- Example: Update status in related rented_units view if unit is rented
+    IF NEW.status = 'rented' THEN
+        INSERT INTO rented_units VALUES (NEW.unit_id, NEW.unit_name, NEW.status, NEW.rent_amount, NEW.tenant_id, NEW.due_date);
+    END IF;
+END;
+//
+DELIMITER ;
+
+-- to use this trigger after_unit_insert EXAMPLE
+INSERT INTO units (unit_name, status, rent_amount, tenant_id, due_date) VALUES
+('Unit 101', 'rented', 1500.00, 1, '2024-04-01');
+
+-- trigger after_unit_update
+DELIMITER //
+CREATE TRIGGER after_unit_update
+AFTER UPDATE ON units
+FOR EACH ROW
+BEGIN
+    -- Example: Update status in related rented_units view if unit status changes
+    IF OLD.status <> NEW.status THEN
+        IF NEW.status = 'rented' THEN
+            INSERT INTO rented_units VALUES (NEW.unit_id, NEW.unit_name, NEW.status, NEW.rent_amount, NEW.tenant_id, NEW.due_date);
+        ELSE
+            DELETE FROM rented_units WHERE unit_id = NEW.unit_id;
+        END IF;
+    END IF;
+END;
+//
+DELIMITER ;
+
+-- to use this trigger after_unit_update EXAMPLE
+UPDATE units SET status = 'available' WHERE unit_id = 101;
+
+-- trigger after_unit_delete
+DELIMITER //
+CREATE TRIGGER after_unit_delete
+AFTER DELETE ON units
+FOR EACH ROW
+BEGIN
+    -- Example: If a unit is deleted, remove it from rented_units view
+    DELETE FROM rented_units WHERE unit_id = OLD.unit_id;
+END;
+//
+DELIMITER ;
+
+-- to use this trigger after_unit_delete EXAMPLE
+DELETE FROM units WHERE unit_id = 101;
+
+
+-- BEFORE TRIGGERS
+-- create trigger before_update_rent_amount
+DELIMITER //
+CREATE TRIGGER before_update_rent_amount
+BEFORE UPDATE ON units
+FOR EACH ROW
+BEGIN
+    -- Check if the updated value meets a certain condition
+    IF NEW.status = "available" THEN
+        -- Perform some action if the condition is met
+    	SET NEW.rent_amount = 1800; -- Double the value
+    ELSEIF NEW.status = "rented" THEN
+	SET NEW.rent_amount = 2000;
+    END IF;
+END;
+//
+DELIMITER ;
+
+-- create trigger before_insert_rent_amount
+DELIMITER //
+CREATE TRIGGER before_insert_rent_amount
+BEFORE INSERT ON units
+FOR EACH ROW
+BEGIN
+    IF NEW.status = "available" THEN
+        -- Perform some action if the condition is met
+        SET NEW.rent_amount = 1800; -- Double the value
+    ELSEIF NEW.status = "rented" THEN
+	SET NEW.rent_amount = 2000;
+    END IF;
+END;
+//
+DELIMITER ;
+
+-- HERE I create a table expenses with columns expense_id, name and expense_total
+-- And then I update manually 1st by doing sum in COLUMN expense_total and the row is "units_amount"
+update expenses
+set expense_total = (select sum(rent_amount) from units) 
+where name = "units_amount";
+
+-- Here I update manually 1st by doing sum in COLUMN expense_total and the row is "rental_amount" where status from units is "rented"...
+update expenses
+set expense_total = (select sum(rent_amount) from units where status = "rented") 
+where name = "rental_amount";
+
+-- Here I update manually 1st by doing sum in COLUMN expense_total and the row is "avail_amount" where status from units is "available"...
+update expenses
+set expense_total = (select sum(rent_amount) from units where status = "available") 
+where name = "avail_amount";
+
+-- DELETE EACH ROWS when deleting units triggered then expense_total will decrease
+DELIMITER //
+CREATE TRIGGER after_delete_rent_amount
+AFTER DELETE ON units
+FOR EACH ROW
+BEGIN
+    UPDATE expenses
+    SET expense_total = expense_total - OLD.rent_amount
+    WHERE name IN ("units_amount", "rental_amount", "avail_amount");
+END;
+//
+DELIMITER ;
+
+-- DELETE example to trigger
+delete from units
+where unit_id = 10;
+
+-- INSERT TRIGGER to insert/add rent_amount to total amounts under units_amount on Expenses Table
+DELIMITER //
+CREATE TRIGGER after_insert_rent_amount
+AFTER INSERT ON units
+FOR EACH ROW
+BEGIN
+    UPDATE expenses
+    SET expense_total = expense_total + NEW.rent_amount
+    WHERE name = 'units_amount';
+
+    UPDATE expenses
+    SET expense_total = expense_total + NEW.rent_amount
+    WHERE name = 'rental_amount';
+
+    UPDATE expenses
+    SET expense_total = expense_total + NEW.rent_amount
+    WHERE name = 'avail_amount';
+END;
+//
+DELIMITER ;
+
+
+-- UPDATE TRIGGER after updating units rent_amount
+DELIMITER //
+CREATE TRIGGER after_update_rent_amount
+AFTER UPDATE ON units
+FOR EACH ROW
+BEGIN
+    UPDATE expenses
+    SET expense_total = expense_total + (NEW.rent_amount - OLD.rent_amount)
+    WHERE name = 'units_amount';
+    
+    UPDATE expenses
+    SET expense_total = expense_total + (NEW.rent_amount - OLD.rent_amount)
+    WHERE name = 'rental_amount';
+    
+    UPDATE expenses
+    SET expense_total = expense_total + (NEW.rent_amount - OLD.rent_amount)
+    WHERE name = 'avail_amount';
+END;
+//
+DELIMITER ;
+
+-- UPDATE TRIGGER example
+update units
+set rent_amount = 1900
+where unit_id = 5;
